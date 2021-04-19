@@ -427,7 +427,7 @@ PARSER_BEGIN(HansenLite)
        */
       public static void declare(Token object) throws ParseException {
          // No redeclarations!
-         if SYMBOL_TABLE.containsKey(object.image) {
+         if (SYMBOL_TABLE.containsKey(object.image)) {
             throw new ParseException("Encountered duplicate declaration of variable '" +
                   object.image + "' at line " + object.beginLine +
                   ", column " + object.beginColumn);
