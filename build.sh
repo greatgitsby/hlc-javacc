@@ -2,3 +2,4 @@
 
 rm ./out/*.java
 javacc -OUTPUT_DIRECTORY=./out $1
+exit

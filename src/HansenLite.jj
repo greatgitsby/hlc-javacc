@@ -95,7 +95,7 @@ PARSER_BEGIN(HansenLite)
             // The Statement production is the start of the
             // grammar. So begin there and see if we can successfully
             // parse the input
-            parser.Statement();
+            parser.Program();
             System.out.println("Success!");
          }
          catch (ParseException e) { // Parser error?
@@ -220,7 +220,7 @@ PARSER_BEGIN(HansenLite)
                emit("ldr r" + (register = getNextRegister() )
                      + ", =CONST_" + forSymbol._location);
                break;
-            case HansenLiteConstants.NUMBER:
+            case HansenLiteConstants.INT_CONST:
                // These kinds of symbols are either constants OR
                // temporary values that are either being computed or
                // already sitting on the operand stack.
@@ -325,7 +325,7 @@ PARSER_BEGIN(HansenLite)
          // and would need to set it to the "kind" of the operand if it
          // were an identifier - here I don't look at the kinds of
          // operands but always set the type to be a number
-         Symbol result = new Symbol(new Token(HansenLiteConstants.NUMBER));
+         Symbol result = new Symbol(new Token(HansenLiteConstants.INT_CONST));
          // Get the two operands and have them assigned to registers
          int rhsRegister = getRegisterHolding(OPERAND_STACK.pop());
          int lhsRegister = getRegisterHolding(OPERAND_STACK.pop());
@@ -409,7 +409,7 @@ PARSER_BEGIN(HansenLite)
             int register = getRegisterHolding(OPERAND_STACK.pop());
             // Create a new anopnymous symbol
             // TODO handle integer or float
-            Symbol negated = new Symbol(new Token(HansenLiteConstants.NUMBER));
+            Symbol negated = new Symbol(new Token(HansenLiteConstants.INT_CONST));
 
             // Negate the old value into the same register
             emit("neg r" + register +", r"+register);
@@ -528,15 +528,9 @@ PARSER_BEGIN(HansenLite)
 
 PARSER_END(HansenLite)
 
-
-
-
-
-   /***********************************************************************************
-     Language Definitiion
-    ***********************************************************************************/
-
-
+/***********************************************************************************
+ Language Definitiion
+***********************************************************************************/
 
 /******************
  * TOKENS and LEXEMES
@@ -555,16 +549,17 @@ SKIP:{
 /* Constants */
 TOKEN:{
          <#DIGIT:["0"-"9"]>
+            | <INT_CONST :<DIGIT> (<DIGIT>)*>
+            | <FLOAT_CONST: <INT_CONST> "." <INT_CONST> [ "E", "e" ] > // todo finish
             | <#LETTER:["A"-"Z","_","a"-"z"]>
-            | <NUMBER :<DIGIT> (<DIGIT>)*>
+
             | <STRING_CONST :"\""(~["\""])*"\"">
 }
 
 
 /* Reserved words and identifiers */
 TOKEN:{
-         <VAR:"variable">
-            | <PRINT:"print">
+       <PRINT:"print">
             | <IF:"if">
             | <THEN:"then">
             | <ELSE:"else">
@@ -573,6 +568,16 @@ TOKEN:{
             | <BEGIN:"begin">
             | <END:"end">
             | <STATEMENT_SEP:";">
+            | <READ:"read">
+            | <PROGRAM:"program">
+            | <INTEGER:"integer">
+            | <FLOAT:"float">
+            | <STRING:"string">
+            | <DEFINE:"define">
+            | <ON:"on">
+            | <AS:"as">
+            | <LIST_SEPARATOR:",">
+            | <TYPE_SEPARATOR:":">
             | <IDENTIFIER:<LETTER> (<LETTER> | <DIGIT>)*>
 }
 
@@ -600,6 +605,88 @@ TOKEN:{
  * GRAMMAR
  ******************/
 
+void Program():{}
+{
+    <PROGRAM>
+    <IDENTIFIER>
+    FunctionDeclarations()
+    VariableDeclarations()
+    <BEGIN>
+    StatementList()
+    <END>
+}
+
+void DeclarationList():{}
+{
+    <STATEMENT_SEP> Declaration() DeclarationList()
+}
+
+void Declaration():{}
+{
+    <IDENTIFIER> <TYPE_SEPARATOR> DataType()
+}
+
+void DataType():{}
+{
+    <STRING>
+        | <INTEGER>
+        | <FLOAT>
+}
+
+void ReadIdentifier():{}
+{
+    <READ> <IDENTIFIER>
+}
+
+void VariableDeclarations():{}
+{
+    Declaration() DeclarationList()
+}
+
+void FunctionDeclarations():{}
+{
+    <DEFINE>
+    Declaration()
+    FormalParamList()
+    <AS>
+    [VariableDeclarations()]
+    <BEGIN>
+    StatementList()
+    <END>
+    [FunctionDeclarations()]
+}
+
+void FormalParamList():{}
+{
+    <ON> Declaration() SeparatedFormalParamList()
+}
+
+void SeparatedFormalParamList():{}
+{
+    <LIST_SEPARATOR> Declaration() [SeparatedFormalParamList()]
+}
+
+void Number():{}
+{
+    <INT_CONST>
+        | <FLOAT_CONST>
+}
+
+void Parameters():{}
+{
+    "("ParamList()"}"
+}
+
+void ParamList():{}
+{
+    Expression() SeparatedFormalParamList()
+}
+
+void SeparatedParamList():{}
+{
+    <LIST_SEPARATOR> Expression() [ SeparatedParamList() ]
+}
+
 // Statements are assignments, if, while, print, variable declaration,
 // or a block-of-statements
 void Statement():{}
@@ -608,16 +695,8 @@ void Statement():{}
       | IfStatement()
       | WhileStatement()
       | PrintStatement()
-      | DeclarationStatement()
       | Block()
-}
-
-
-// A variable declaration is the keyword "variable" followed by the name of a variable
-void DeclarationStatement():{}
-{
-   <VAR><IDENTIFIER>
-      {declare(token);}
+      | ReadIdentifier()
 }
 
 
@@ -750,10 +829,9 @@ void MultiplicativeExpression():{Token operator;}
 void Factor():{}
 {
    "("Expression()")"
-   | <IDENTIFIER>
+   | <IDENTIFIER> [Parameters()]
       {load(token);}
-   | <NUMBER>
-      {load_int(token);}
+   | Number()
    | SignedTerm()
 }
 
